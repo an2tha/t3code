@@ -1,63 +1,27 @@
-name: Sync T3 upstream
+name: Sync upstream
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Sync main with upstream
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync with upstream
         run: |
-          gh repo sync "${{ github.repository }}" \
-            --source t3dotgg/t3-code \
-            --branch main
-
-      - name: Create/update custom branch PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          REPO="${{ github.repository }}"
-
-          # Make sure glm-bai exists and is based on the latest main.
-          if gh api "repos/$REPO/git/ref/heads/glm-bai" >/dev/null 2>&1; then
-            echo "glm-bai already exists"
-          else
-            MAIN_SHA=$(gh api "repos/$REPO/git/ref/heads/main" \
-              --jq '.object.sha')
-
-            gh api \
-              --method POST \
-              "repos/$REPO/git/refs" \
-              -f ref="refs/heads/glm-bai" \
-              -f sha="$MAIN_SHA"
-          fi
-
-          # Create the PR if one doesn't already exist.
-          PR=$(gh pr list \
-            --repo "$REPO" \
-            --base glm-bai \
-            --head main \
-            --state open \
-            --json number \
-            --jq '.[0].number')
-
-          if [ -z "$PR" ]; then
-            gh pr create \
-              --repo "$REPO" \
-              --base glm-bai \
-              --head main \
-              --title "Sync upstream T3 Code" \
-              --body "Automatically sync latest upstream T3 Code changes."
-          else
-            echo "Existing sync PR: #$PR"
-          fi
+          git remote add upstream https://github.com/t3dotgg/t3-code.git || true
+          git fetch upstream main
+          git checkout main
+          git reset --hard upstream/main
+          git push origin main --force
